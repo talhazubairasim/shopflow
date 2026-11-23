@@ -108,7 +108,7 @@ public class OrderStateMachine : MassTransitStateMachine<OrderState>
     }
 }
 
-public class OrderStateMap : MassTransit.EntityFrameworkCoreIntegration.SagaClassMap<OrderState>
+public class OrderStateMap : SagaClassMap<OrderState>
 {
     protected override void Configure(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<OrderState> e,
         Microsoft.EntityFrameworkCore.ModelBuilder model)
