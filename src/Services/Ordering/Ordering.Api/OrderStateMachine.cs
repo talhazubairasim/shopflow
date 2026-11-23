@@ -1,5 +1,6 @@
 using System.Text.Json;
 using MassTransit;
+using Microsoft.EntityFrameworkCore;
 using ShopFlow.Contracts;
 
 namespace Ordering.Api;
