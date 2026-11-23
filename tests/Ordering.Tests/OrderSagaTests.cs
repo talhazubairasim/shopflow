@@ -108,8 +108,9 @@ public class OrdersApiTests : IClassFixture<OrdersApiTests.Factory>
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseSetting("ConnectionStrings:Ordering", "");
+            // The real in-memory bus, not the test harness: the harness swaps saga
+            // repositories for in-memory ones, and this test reads orders through EF.
             builder.UseSetting("Messaging:Transport", "InMemory");
-            builder.ConfigureServices(s => s.AddMassTransitTestHarness());
         }
     }
 
@@ -119,9 +120,9 @@ public class OrdersApiTests : IClassFixture<OrdersApiTests.Factory>
     [Fact]
     public async Task Buyers_see_only_their_orders_and_admins_see_all()
     {
-        var harness = _f.Services.GetRequiredService<ITestHarness>();
+        var bus = _f.Services.GetRequiredService<IBus>();
         var id = Guid.NewGuid();
-        await harness.Bus.Publish(new BasketCheckedOut(id, "alice", "alice@x.dev",
+        await bus.Publish(new BasketCheckedOut(id, "alice", "alice@x.dev",
             new[] { new OrderLine(Guid.NewGuid(), "Book", 10m, 1) },
             new ShippingAddress("Alice", "1 St", "City", "PK", "1"), "4242424242424242", DateTime.UtcNow));
 
@@ -134,10 +135,7 @@ public class OrdersApiTests : IClassFixture<OrdersApiTests.Factory>
             if (res.IsSuccessStatusCode) order = await res.Content.ReadFromJsonAsync<OrderDto>();
             else { last = $"{(int)res.StatusCode} {await res.Content.ReadAsStringAsync()}"; await Task.Delay(100); }
         }
-        var fault = harness.Published.Select<Fault<BasketCheckedOut>>().FirstOrDefault()?.Context.Message;
-        Assert.True(order != null,
-            $"last response: {last}; consumed: {await harness.Consumed.Any<BasketCheckedOut>()}; " +
-            $"fault: {fault?.Exceptions.FirstOrDefault()?.ExceptionType} {fault?.Exceptions.FirstOrDefault()?.Message}");
+        Assert.True(order != null, $"order never appeared; last response: {last}");
         Assert.Equal("Submitted", order!.Status);
         Assert.Equal("City", order.Address!.City);
         Assert.Single(await alice.GetFromJsonAsync<List<OrderDto>>("/api/orders") ?? new());
