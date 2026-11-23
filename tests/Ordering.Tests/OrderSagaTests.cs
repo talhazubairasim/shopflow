@@ -127,13 +127,17 @@ public class OrdersApiTests : IClassFixture<OrdersApiTests.Factory>
 
         var alice = _f.CreateClient().As("alice");
         OrderDto? order = null;
+        string last = "";
         for (int i = 0; i < 50 && order == null; i++)
         {
             var res = await alice.GetAsync($"/api/orders/{id}");
             if (res.IsSuccessStatusCode) order = await res.Content.ReadFromJsonAsync<OrderDto>();
-            else await Task.Delay(100);
+            else { last = $"{(int)res.StatusCode} {await res.Content.ReadAsStringAsync()}"; await Task.Delay(100); }
         }
-        Assert.NotNull(order);
+        var fault = harness.Published.Select<Fault<BasketCheckedOut>>().FirstOrDefault()?.Context.Message;
+        Assert.True(order != null,
+            $"last response: {last}; consumed: {await harness.Consumed.Any<BasketCheckedOut>()}; " +
+            $"fault: {fault?.Exceptions.FirstOrDefault()?.ExceptionType} {fault?.Exceptions.FirstOrDefault()?.Message}");
         Assert.Equal("Submitted", order!.Status);
         Assert.Equal("City", order.Address!.City);
         Assert.Single(await alice.GetFromJsonAsync<List<OrderDto>>("/api/orders") ?? new());
