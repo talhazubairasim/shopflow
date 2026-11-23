@@ -9,7 +9,8 @@ fail() { echo "  ✗ $1"; exit 1; }
 
 wait_for() { for _ in $(seq 1 60); do curl -fs "$1" >/dev/null 2>&1 && return 0; sleep 2; done; fail "timed out waiting for $1"; }
 
-echo "Waiting for the gateway and catalog..."
+echo "Waiting for every service to be ready (database and message bus connected)..."
+for svc in catalog basket ordering payment identity notification; do wait_for "$API/health/$svc"; done
 wait_for "$API/api/catalog/categories"
 
 EMAIL="e2e-$RANDOM@shopflow.dev"
