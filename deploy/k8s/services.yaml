@@ -1,0 +1,226 @@
+# The six microservices. Images are built by CI from the root Dockerfile.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: catalog, labels: { app: catalog } }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: catalog } }
+  template:
+    metadata: { labels: { app: catalog } }
+    spec:
+      containers:
+        - name: catalog
+          image: ghcr.io/talhazubairasim/shopflow-catalog:latest
+          ports: [{ containerPort: 8080 }]
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: shopflow-secrets, key: postgres-password } }
+            - name: Jwt__Key
+              valueFrom: { secretKeyRef: { name: shopflow-secrets, key: jwt-key } }
+            - name: RabbitMq__Password
+              valueFrom: { secretKeyRef: { name: shopflow-secrets, key: rabbitmq-password } }
+            - { name: Urls, value: "http://+:8080" }
+            - { name: RabbitMq__Host, value: "rabbitmq" }
+            - { name: RabbitMq__Username, value: "shopflow" }
+            - { name: ConnectionStrings__Catalog, value: "Host=postgres;Database=catalog;Username=shopflow;Password=$(POSTGRES_PASSWORD)" }
+          readinessProbe: { httpGet: { path: /health/ready, port: 8080 }, periodSeconds: 10 }
+          livenessProbe: { httpGet: { path: /health/live, port: 8080 }, periodSeconds: 20 }
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { memory: 384Mi }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: catalog }
+spec:
+  selector: { app: catalog }
+  ports: [{ port: 8080, targetPort: 8080 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: basket, labels: { app: basket } }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: basket } }
+  template:
+    metadata: { labels: { app: basket } }
+    spec:
+      containers:
+        - name: basket
+          image: ghcr.io/talhazubairasim/shopflow-basket:latest
+          ports: [{ containerPort: 8080 }]
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: shopflow-secrets, key: postgres-password } }
+            - name: Jwt__Key
+              valueFrom: { secretKeyRef: { name: shopflow-secrets, key: jwt-key } }
+            - name: RabbitMq__Password
+              valueFrom: { secretKeyRef: { name: shopflow-secrets, key: rabbitmq-password } }
+            - { name: Urls, value: "http://+:8080" }
+            - { name: RabbitMq__Host, value: "rabbitmq" }
+            - { name: RabbitMq__Username, value: "shopflow" }
+            - { name: ConnectionStrings__Redis, value: "redis:6379" }
+            - { name: Services__Catalog, value: "http://catalog:8080" }
+          readinessProbe: { httpGet: { path: /health/ready, port: 8080 }, periodSeconds: 10 }
+          livenessProbe: { httpGet: { path: /health/live, port: 8080 }, periodSeconds: 20 }
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { memory: 384Mi }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: basket }
+spec:
+  selector: { app: basket }
+  ports: [{ port: 8080, targetPort: 8080 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: ordering, labels: { app: ordering } }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: ordering } }
+  template:
+    metadata: { labels: { app: ordering } }
+    spec:
+      containers:
+        - name: ordering
+          image: ghcr.io/talhazubairasim/shopflow-ordering:latest
+          ports: [{ containerPort: 8080 }]
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: shopflow-secrets, key: postgres-password } }
+            - name: Jwt__Key
+              valueFrom: { secretKeyRef: { name: shopflow-secrets, key: jwt-key } }
+            - name: RabbitMq__Password
+              valueFrom: { secretKeyRef: { name: shopflow-secrets, key: rabbitmq-password } }
+            - { name: Urls, value: "http://+:8080" }
+            - { name: RabbitMq__Host, value: "rabbitmq" }
+            - { name: RabbitMq__Username, value: "shopflow" }
+            - { name: ConnectionStrings__Ordering, value: "Host=postgres;Database=ordering;Username=shopflow;Password=$(POSTGRES_PASSWORD)" }
+          readinessProbe: { httpGet: { path: /health/ready, port: 8080 }, periodSeconds: 10 }
+          livenessProbe: { httpGet: { path: /health/live, port: 8080 }, periodSeconds: 20 }
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { memory: 384Mi }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: ordering }
+spec:
+  selector: { app: ordering }
+  ports: [{ port: 8080, targetPort: 8080 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: payment, labels: { app: payment } }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: payment } }
+  template:
+    metadata: { labels: { app: payment } }
+    spec:
+      containers:
+        - name: payment
+          image: ghcr.io/talhazubairasim/shopflow-payment:latest
+          ports: [{ containerPort: 8080 }]
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: shopflow-secrets, key: postgres-password } }
+            - name: Jwt__Key
+              valueFrom: { secretKeyRef: { name: shopflow-secrets, key: jwt-key } }
+            - name: RabbitMq__Password
+              valueFrom: { secretKeyRef: { name: shopflow-secrets, key: rabbitmq-password } }
+            - { name: Urls, value: "http://+:8080" }
+            - { name: RabbitMq__Host, value: "rabbitmq" }
+            - { name: RabbitMq__Username, value: "shopflow" }
+          readinessProbe: { httpGet: { path: /health/ready, port: 8080 }, periodSeconds: 10 }
+          livenessProbe: { httpGet: { path: /health/live, port: 8080 }, periodSeconds: 20 }
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { memory: 384Mi }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: payment }
+spec:
+  selector: { app: payment }
+  ports: [{ port: 8080, targetPort: 8080 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: identity, labels: { app: identity } }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: identity } }
+  template:
+    metadata: { labels: { app: identity } }
+    spec:
+      containers:
+        - name: identity
+          image: ghcr.io/talhazubairasim/shopflow-identity:latest
+          ports: [{ containerPort: 8080 }]
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: shopflow-secrets, key: postgres-password } }
+            - name: Jwt__Key
+              valueFrom: { secretKeyRef: { name: shopflow-secrets, key: jwt-key } }
+            - name: RabbitMq__Password
+              valueFrom: { secretKeyRef: { name: shopflow-secrets, key: rabbitmq-password } }
+            - { name: Urls, value: "http://+:8080" }
+            - { name: RabbitMq__Host, value: "rabbitmq" }
+            - { name: RabbitMq__Username, value: "shopflow" }
+            - { name: ConnectionStrings__Identity, value: "Host=postgres;Database=identity;Username=shopflow;Password=$(POSTGRES_PASSWORD)" }
+            - name: Seed__AdminPassword
+              valueFrom: { secretKeyRef: { name: shopflow-secrets, key: admin-password } }
+          readinessProbe: { httpGet: { path: /health/ready, port: 8080 }, periodSeconds: 10 }
+          livenessProbe: { httpGet: { path: /health/live, port: 8080 }, periodSeconds: 20 }
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { memory: 384Mi }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: identity }
+spec:
+  selector: { app: identity }
+  ports: [{ port: 8080, targetPort: 8080 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: notification, labels: { app: notification } }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: notification } }
+  template:
+    metadata: { labels: { app: notification } }
+    spec:
+      containers:
+        - name: notification
+          image: ghcr.io/talhazubairasim/shopflow-notification:latest
+          ports: [{ containerPort: 8080 }]
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: shopflow-secrets, key: postgres-password } }
+            - name: Jwt__Key
+              valueFrom: { secretKeyRef: { name: shopflow-secrets, key: jwt-key } }
+            - name: RabbitMq__Password
+              valueFrom: { secretKeyRef: { name: shopflow-secrets, key: rabbitmq-password } }
+            - { name: Urls, value: "http://+:8080" }
+            - { name: RabbitMq__Host, value: "rabbitmq" }
+            - { name: RabbitMq__Username, value: "shopflow" }
+            - { name: Smtp__Host, value: "mailhog" }
+            - { name: Smtp__Port, value: "1025" }
+          readinessProbe: { httpGet: { path: /health/ready, port: 8080 }, periodSeconds: 10 }
+          livenessProbe: { httpGet: { path: /health/live, port: 8080 }, periodSeconds: 20 }
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { memory: 384Mi }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: notification }
+spec:
+  selector: { app: notification }
+  ports: [{ port: 8080, targetPort: 8080 }]

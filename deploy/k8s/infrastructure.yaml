@@ -1,0 +1,97 @@
+# Single-replica backing services for a demo cluster. In production use managed
+# Postgres / Redis / RabbitMQ (or their operators) instead.
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: postgres-init }
+data:
+  init.sql: |
+    CREATE DATABASE catalog;
+    CREATE DATABASE ordering;
+    CREATE DATABASE identity;
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: { name: postgres }
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector: { matchLabels: { app: postgres } }
+  template:
+    metadata: { labels: { app: postgres } }
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          env:
+            - { name: POSTGRES_USER, value: shopflow }
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: shopflow-secrets, key: postgres-password } }
+          ports: [{ containerPort: 5432 }]
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/postgresql/data }
+            - { name: init, mountPath: /docker-entrypoint-initdb.d }
+      volumes:
+        - name: init
+          configMap: { name: postgres-init }
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec: { accessModes: [ReadWriteOnce], resources: { requests: { storage: 5Gi } } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: postgres }
+spec: { selector: { app: postgres }, ports: [{ port: 5432 }] }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: redis }
+spec:
+  selector: { matchLabels: { app: redis } }
+  template:
+    metadata: { labels: { app: redis } }
+    spec:
+      containers:
+        - { name: redis, image: redis:7-alpine, ports: [{ containerPort: 6379 }] }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: redis }
+spec: { selector: { app: redis }, ports: [{ port: 6379 }] }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: rabbitmq }
+spec:
+  selector: { matchLabels: { app: rabbitmq } }
+  template:
+    metadata: { labels: { app: rabbitmq } }
+    spec:
+      containers:
+        - name: rabbitmq
+          image: rabbitmq:3.13-management-alpine
+          env:
+            - { name: RABBITMQ_DEFAULT_USER, value: shopflow }
+            - name: RABBITMQ_DEFAULT_PASS
+              valueFrom: { secretKeyRef: { name: shopflow-secrets, key: rabbitmq-password } }
+          ports: [{ containerPort: 5672 }, { containerPort: 15672 }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: rabbitmq }
+spec: { selector: { app: rabbitmq }, ports: [{ name: amqp, port: 5672 }, { name: ui, port: 15672 }] }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: mailhog }
+spec:
+  selector: { matchLabels: { app: mailhog } }
+  template:
+    metadata: { labels: { app: mailhog } }
+    spec:
+      containers:
+        - { name: mailhog, image: mailhog/mailhog:v1.0.1, ports: [{ containerPort: 1025 }, { containerPort: 8025 }] }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: mailhog }
+spec: { selector: { app: mailhog }, ports: [{ name: smtp, port: 1025 }, { name: ui, port: 8025 }] }

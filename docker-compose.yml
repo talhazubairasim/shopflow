@@ -1,0 +1,124 @@
+# Full ShopFlow stack:  docker compose up --build
+#   Storefront      http://localhost:3000
+#   API gateway     http://localhost:5100
+#   RabbitMQ UI     http://localhost:15672  (guest / guest)
+#   MailHog (email) http://localhost:8025
+
+x-service: &service
+  build:
+    context: .
+  restart: unless-stopped
+  environment: &env
+    Urls: http://+:8080
+    RabbitMq__Host: rabbitmq
+    Jwt__Key: ${JWT_KEY:-development-only-signing-key-change-me-0123456789}
+  depends_on:
+    rabbitmq:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: shopflow
+      POSTGRES_PASSWORD: shopflow
+    volumes:
+      - ./deploy/init-databases.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shopflow"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    ports: ["15672:15672"]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      retries: 20
+
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    ports: ["8025:8025"]
+
+  catalog:
+    <<: *service
+    build: { context: ., args: { PROJECT: src/Services/Catalog/Catalog.Api } }
+    environment:
+      <<: *env
+      ConnectionStrings__Catalog: Host=postgres;Database=catalog;Username=shopflow;Password=shopflow
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  basket:
+    <<: *service
+    build: { context: ., args: { PROJECT: src/Services/Basket/Basket.Api } }
+    environment:
+      <<: *env
+      ConnectionStrings__Redis: redis:6379
+      Services__Catalog: http://catalog:8080
+    depends_on:
+      redis: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  ordering:
+    <<: *service
+    build: { context: ., args: { PROJECT: src/Services/Ordering/Ordering.Api } }
+    environment:
+      <<: *env
+      ConnectionStrings__Ordering: Host=postgres;Database=ordering;Username=shopflow;Password=shopflow
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  payment:
+    <<: *service
+    build: { context: ., args: { PROJECT: src/Services/Payment/Payment.Api } }
+
+  identity:
+    <<: *service
+    build: { context: ., args: { PROJECT: src/Services/Identity/Identity.Api } }
+    environment:
+      <<: *env
+      ConnectionStrings__Identity: Host=postgres;Database=identity;Username=shopflow;Password=shopflow
+      Seed__AdminPassword: ${ADMIN_PASSWORD:-Admin#2025}
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  notification:
+    <<: *service
+    build: { context: ., args: { PROJECT: src/Services/Notification/Notification.Api } }
+    environment:
+      <<: *env
+      Smtp__Host: mailhog
+      Smtp__Port: "1025"
+
+  gateway:
+    build: { context: ., args: { PROJECT: src/Gateway/Gateway.Api } }
+    restart: unless-stopped
+    ports: ["5100:8080"]
+    environment:
+      Urls: http://+:8080
+      Cors__Origins__0: http://localhost:3000
+      ReverseProxy__Clusters__catalog__Destinations__d1__Address: http://catalog:8080
+      ReverseProxy__Clusters__basket__Destinations__d1__Address: http://basket:8080
+      ReverseProxy__Clusters__ordering__Destinations__d1__Address: http://ordering:8080
+      ReverseProxy__Clusters__payment__Destinations__d1__Address: http://payment:8080
+      ReverseProxy__Clusters__identity__Destinations__d1__Address: http://identity:8080
+      ReverseProxy__Clusters__notification__Destinations__d1__Address: http://notification:8080
+    depends_on: [catalog, basket, ordering, payment, identity, notification]
+
+  web:
+    build: { context: ./src/Web }
+    restart: unless-stopped
+    ports: ["3000:80"]
+    depends_on: [gateway]

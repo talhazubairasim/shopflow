@@ -1,0 +1,12 @@
+# kubectl create namespace shopflow
+# kubectl -n shopflow create secret generic shopflow-secrets \
+#   --from-literal=postgres-password=... --from-literal=rabbitmq-password=... \
+#   --from-literal=jwt-key=<at least 32 chars> --from-literal=admin-password=...
+# kubectl apply -k deploy/k8s
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: shopflow
+resources:
+  - infrastructure.yaml
+  - services.yaml
+  - gateway.yaml
