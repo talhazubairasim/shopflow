@@ -115,6 +115,7 @@ public class OrderStateMap : SagaClassMap<OrderState>
         Microsoft.EntityFrameworkCore.ModelBuilder model)
     {
         e.ToTable("orders");
+        e.Ignore(x => x.Lines);
         e.Property(x => x.CurrentState).HasMaxLength(40);
         e.Property(x => x.BuyerId).HasMaxLength(64);
         e.Property(x => x.Total).HasPrecision(18, 2);
